@@ -1,5 +1,13 @@
 package mapreduce
 
+import (
+    "encoding/json"
+    "os"
+    "log"
+    "sort"
+    //"fmt"
+)
+
 // doReduce manages one reduce task: it reads the intermediate
 // key/value pairs (produced by the map phase) for this task, sorts the
 // intermediate key/value pairs by key, calls the user-defined reduce function
@@ -43,4 +51,50 @@ func doReduce(
 	// }
 	// file.Close()
 	//
+    var kvs []KeyValue
+    for i := 0; i < nMap; i ++ {
+        fileHdlr, err := os.Open(reduceName(jobName, i, reduceTaskNumber))
+        if err != nil {
+            log.Fatal(err)
+        }
+        // Read and decode
+        dec := json.NewDecoder(fileHdlr)
+        for {
+            var kv KeyValue
+            if err := dec.Decode(&kv); err != nil {
+                break
+            }
+            kvs = append(kvs, kv)
+        }
+        fileHdlr.Close()
+    }
+
+    // Sort keys
+    sort.Slice(kvs, func(i, j int) bool {
+        return kvs[i].Key < kvs[j].Key
+    })
+
+    // Remove old file
+    os.Remove(outFile)
+    oFileHdlr, err := os.Create(outFile)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer oFileHdlr.Close()
+
+    for i,j := 0, 0; i < len(kvs); i = j {
+        for j = i ; j < len(kvs) && kvs[j].Key == kvs[i].Key; j ++ {}
+
+        // Get values of same key
+        var values []string
+        var kv KeyValue
+        for _, kv = range kvs[i:j] {
+            values = append(values, kv.Value)
+        }
+
+        // Call reduceF function and write to file
+        enc := json.NewEncoder(oFileHdlr)
+        enc.Encode(KeyValue{kv.Key, reduceF(kv.Key, values)})
+    }
+
 }
