@@ -49,8 +49,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
     }
 
     for {
-        // No tasks to do
-        if len(tasks) == 0 {
+        if ntasks == 0 {
             break
         }
         select {
@@ -62,6 +61,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
                 // Add worker to available workers
                 debug("worker %s finished %d\n", para.worker, para.task)
                 workers = append(workers, para.worker)
+                ntasks --
             } else {
                 // Worker failed. Need reschedule this task
                 debug("worker %s failed, %d will be rescheduled\n", para.worker, para.task)
@@ -70,7 +70,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
         }
         var i int
         for i = 0; i < int(math.Min(float64(len(tasks)), float64(len(workers)))); i ++ {
-            debug("i:%d, %d:%s, wkrNum: %d, tskNum: %d\n",i, tasks[i], workers[i], len(workers), len(tasks))
+            debug("%d:%s, wkrNum: %d, tskNum: %d\n",tasks[i], workers[i], len(workers), len(tasks))
             go func(jobName, file string, phase jobPhase, taskNum, n_other int, worker string) {
                 args := new(DoTaskArgs)
                 args.JobName = jobName
@@ -89,11 +89,11 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
                     ps := schedPara{worker, taskNum, "ok"}
                     paraChan <- ps
                 }
-            }(jobName, mapFiles[i], phase, tasks[i], n_other, workers[i])
+            }(jobName, mapFiles[tasks[i]], phase, tasks[i], n_other, workers[i])
         }
 
         // Remove tasks and workers from availabel tasks and workers
-        fmt.Println("i", i, tasks, workers)
+        fmt.Println("i", i, tasks, workers, mapFiles)
         copy(workers[0:], workers[i:])
         workers = workers[:len(workers) - i]
         //fmt.Println("workers", workers)
