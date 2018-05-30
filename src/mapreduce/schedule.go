@@ -1,6 +1,15 @@
 package mapreduce
 
-import "fmt"
+import (
+    "fmt"
+    "math"
+)
+
+type schedPara struct {
+    worker  string
+    task    int
+    err     string
+}
 
 //
 // schedule() starts and waits for all tasks in the given phase (Map
@@ -32,5 +41,67 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	//
 	// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
 	//
+    paraChan := make(chan schedPara)
+    var tasks []int
+    var workers []string
+    for i := 0; i < ntasks; i ++ {
+        tasks = append(tasks, i)
+    }
+
+    for {
+        // No tasks to do
+        if len(tasks) == 0 {
+            break
+        }
+        select {
+        case newWorker := <- registerChan:
+            debug("new worker %s available\n", newWorker)
+            workers = append(workers, newWorker)
+        case para := <- paraChan:
+            if para.err == "ok" {
+                // Add worker to available workers
+                debug("worker %s finished %d\n", para.worker, para.task)
+                workers = append(workers, para.worker)
+            } else {
+                // Worker failed. Need reschedule this task
+                debug("worker %s failed, %d will be rescheduled\n", para.worker, para.task)
+                tasks = append(tasks, para.task)
+            }
+        }
+        var i int
+        for i = 0; i < int(math.Min(float64(len(tasks)), float64(len(workers)))); i ++ {
+            debug("i:%d, %d:%s, wkrNum: %d, tskNum: %d\n",i, tasks[i], workers[i], len(workers), len(tasks))
+            go func(jobName, file string, phase jobPhase, taskNum, n_other int, worker string) {
+                args := new(DoTaskArgs)
+                args.JobName = jobName
+                args.File = file
+                args.Phase = phase
+                args.TaskNumber = taskNum
+                args.NumOtherPhase = n_other
+                // call worker
+                ok := call(worker, "Worker.DoTask", args, new(struct{}))
+                if ok == false {
+                    debug("run worker: run task %d failed on %s\n", taskNum, worker)
+                    ps := schedPara{worker, taskNum, "failed"}
+                    paraChan <- ps
+                } else {
+                    debug("run worker: run task %d ok on %s\n", taskNum, worker)
+                    ps := schedPara{worker, taskNum, "ok"}
+                    paraChan <- ps
+                }
+            }(jobName, mapFiles[i], phase, tasks[i], n_other, workers[i])
+        }
+
+        // Remove tasks and workers from availabel tasks and workers
+        fmt.Println("i", i, tasks, workers)
+        copy(workers[0:], workers[i:])
+        workers = workers[:len(workers) - i]
+        //fmt.Println("workers", workers)
+        copy(tasks[0:], tasks[i:])
+        tasks = tasks[:len(tasks) - i]
+        //fmt.Println("tasks", tasks)
+    }
+
+
 	fmt.Printf("Schedule: %v phase done\n", phase)
 }
