@@ -49,6 +49,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
     }
 
     for {
+        // All tasks done.
         if ntasks == 0 {
             break
         }
@@ -58,12 +59,12 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
             workers = append(workers, newWorker)
         case para := <- paraChan:
             if para.err == "ok" {
-                // Add worker to available workers
+                // Add newly registered worker to available workers
                 debug("worker %s finished %d\n", para.worker, para.task)
                 workers = append(workers, para.worker)
                 ntasks --
             } else {
-                // Worker failed. Need reschedule this task
+                // Worker failed. Need reschedule this task. Add it to todo tasks queue
                 debug("worker %s failed, %d will be rescheduled\n", para.worker, para.task)
                 tasks = append(tasks, para.task)
             }
@@ -81,27 +82,22 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
                 // call worker
                 ok := call(worker, "Worker.DoTask", args, new(struct{}))
                 if ok == false {
-                    debug("run worker: run task %d failed on %s\n", taskNum, worker)
+                    debug("%d:%s failed\n", taskNum, worker)
                     ps := schedPara{worker, taskNum, "failed"}
                     paraChan <- ps
                 } else {
-                    debug("run worker: run task %d ok on %s\n", taskNum, worker)
+                    debug("%d:%s done\n", taskNum, worker)
                     ps := schedPara{worker, taskNum, "ok"}
                     paraChan <- ps
                 }
             }(jobName, mapFiles[tasks[i]], phase, tasks[i], n_other, workers[i])
         }
 
-        // Remove tasks and workers from availabel tasks and workers
-        fmt.Println("i", i, tasks, workers, mapFiles)
-        copy(workers[0:], workers[i:])
-        workers = workers[:len(workers) - i]
-        //fmt.Println("workers", workers)
-        copy(tasks[0:], tasks[i:])
-        tasks = tasks[:len(tasks) - i]
-        //fmt.Println("tasks", tasks)
+        // Remove allocated tasks and workers from available tasks and workers
+        workers = append(workers[:0], workers[i:]...)
+        tasks   = append(tasks[:0], tasks[i:]...)
+        debug("todo tasks: %v\n",tasks)
     }
-
 
 	fmt.Printf("Schedule: %v phase done\n", phase)
 }
