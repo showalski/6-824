@@ -18,7 +18,7 @@ import (
 // of key/value pairs.
 //
 func mapF(filename string, contents string) []mapreduce.KeyValue {
-	// TODO: you have to write this function
+	// Your code here (Part II).
     var kvs []mapreduce.KeyValue
 
     f := func(c rune) bool {
@@ -39,7 +39,7 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 // any map task.
 //
 func reduceF(key string, values []string) string {
-	// TODO: you also have to write this function
+	// Your code here (Part II).
     count := 0
     for _, value := range values {
         n, err := strconv.Atoi(value)
@@ -67,6 +67,6 @@ func main() {
 		}
 		mr.Wait()
 	} else {
-		mapreduce.RunWorker(os.Args[2], os.Args[3], mapF, reduceF, 100)
+		mapreduce.RunWorker(os.Args[2], os.Args[3], mapF, reduceF, 100, nil)
 	}
 }
